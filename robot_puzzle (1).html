@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Robot Puzzle</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #f0f0f0;
+    font-family: 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+
+  /* ── GRID ── */
+  #game-area {
+    background: #e8e8e8;
+    border-radius: 12px;
+    padding: 20px 30px 30px;
+    margin-bottom: 10px;
+  }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(15, 36px);
+    grid-template-rows: repeat(9, 36px);
+    gap: 4px;
+  }
+  .cell {
+    width: 36px; height: 36px;
+    border-radius: 6px;
+    background: #d8d8d8;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    transition: background 0.1s;
+    position: relative;
+  }
+  .cell.green  { background: #2ecc5f; }
+  .cell.red    { background: #e84141; }
+  .cell.empty  { background: #d4d4d4; }
+
+  .cell.robot {
+    z-index: 2;
+  }
+  .cell.star {
+    background: #2ecc5f;
+  }
+
+  /* robot SVG icon */
+  .robot-icon {
+    width: 22px; height: 22px;
+    fill: white;
+  }
+  .star-icon { font-size: 20px; color: white; }
+
+  /* ── EXECUTION HISTORY ── */
+  #exec-section {
+    width: 100%;
+    max-width: 900px;
+    margin-bottom: 16px;
+  }
+  #exec-label {
+    font-size: 13px; font-weight: 600; color: #555;
+    margin-bottom: 4px;
+  }
+  #exec-bar {
+    display: flex; align-items: center; gap: 8px;
+  }
+  #exec-log {
+    flex: 1;
+    background: #222;
+    color: #ccc;
+    font-family: monospace;
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    height: 36px;
+    display: flex; align-items: center;
+  }
+  #exec-log .prompt { color: #aaa; margin-right: 6px; }
+  .exec-btns { display: flex; gap: 6px; }
+  .exec-btn {
+    width: 36px; height: 36px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .exec-btn.blue { background: #3b82f6; color: white; }
+  .exec-btn.gray { background: #ddd; color: #555; }
+
+  /* ── BOTTOM PANEL ── */
+  #bottom {
+    display: flex;
+    gap: 40px;
+    width: 100%;
+    max-width: 900px;
+    align-items: flex-start;
+  }
+  #left-panel { flex: 0 0 auto; }
+  #right-panel { flex: 0 0 auto; }
+
+  .panel-label {
+    font-size: 13px; font-weight: 700; color: #444;
+    margin-bottom: 10px;
+    letter-spacing: 0.3px;
+  }
+
+  /* Commands */
+  #commands-row {
+    display: flex; gap: 6px; margin-bottom: 14px;
+  }
+  .cmd-btn {
+    width: 42px; height: 42px;
+    background: #e8e8e8;
+    border: 1.5px solid #ccc;
+    border-radius: 6px;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600;
+    color: #333;
+    transition: all 0.1s;
+    user-select: none;
+  }
+  .cmd-btn:hover { background: #ddd; }
+  .cmd-btn.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #2563eb;
+  }
+  .cmd-btn.fn { font-size: 12px; font-weight: 700; }
+
+  /* Conditions */
+  #conditions-row {
+    display: flex; gap: 8px;
+  }
+  .cond-btn {
+    width: 38px; height: 38px;
+    border-radius: 6px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+  .cond-btn.red-cond   { background: #e84141; }
+  .cond-btn.blue-cond  { background: #4a90d9; }
+  .cond-btn.green-cond { background: #2ecc5f; }
+  .cond-btn.active { border-color: #222; outline: 2px solid #fff; outline-offset: 1px; }
+
+  /* Functions */
+  .fn-row {
+    display: flex; align-items: center; gap: 0; margin-bottom: 8px;
+  }
+  .fn-label-box {
+    width: 36px; height: 36px;
+    background: #3b82f6;
+    color: white;
+    border-radius: 6px 0 0 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .fn-slot {
+    width: 36px; height: 36px;
+    background: white;
+    border: 1.5px solid #ccc;
+    border-left: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    position: relative;
+    transition: background 0.1s;
+    color: #333;
+  }
+  .fn-slot:last-child { border-radius: 0 6px 6px 0; }
+  .fn-slot:hover { background: #f0f8ff; }
+  .fn-slot.filled { background: #f5f5f5; }
+  .fn-slot .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    position: absolute;
+    bottom: 3px; right: 3px;
+  }
+  .fn-slot .dot.red   { background: #e84141; }
+  .fn-slot .dot.blue  { background: #4a90d9; }
+  .fn-slot .dot.green { background: #2ecc5f; }
+
+  /* Main program row (above exec) */
+  #main-program-row {
+    display: flex; gap: 0; margin-bottom: 0;
+  }
+  .main-slot {
+    width: 36px; height: 36px;
+    background: white;
+    border: 1.5px solid #ccc;
+    border-right: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 15px; font-weight: 600;
+    position: relative;
+    transition: background 0.1s;
+    color: #333;
+  }
+  .main-slot:first-child { border-radius: 6px 0 0 6px; }
+  .main-slot:last-child { border-right: 1.5px solid #ccc; border-radius: 0 6px 6px 0; }
+  .main-slot:hover { background: #f0f8ff; }
+  .main-slot.filled { background: #f5f5f5; }
+  .main-slot .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    position: absolute;
+    bottom: 3px; right: 3px;
+  }
+  .main-slot .dot.red   { background: #e84141; }
+  .main-slot .dot.blue  { background: #4a90d9; }
+  .main-slot .dot.green { background: #2ecc5f; }
+
+  #win-msg {
+    display: none;
+    position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
+    background: #2ecc5f; color: white;
+    padding: 12px 28px; border-radius: 10px;
+    font-size: 18px; font-weight: 700;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    z-index: 999;
+  }
+  #main-prog-label {
+    font-size: 13px; font-weight: 700; color: #444;
+    margin-bottom: 6px;
+  }
+  #main-area {
+    width: 100%; max-width: 900px;
+    margin-bottom: 10px;
+  }
+  .highlight-step { outline: 3px solid #f59e0b; outline-offset: -2px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div id="win-msg">🎉 You reached the star!</div>
+
+<!-- GRID -->
+<div id="game-area">
+  <div id="grid"></div>
+</div>
+
+<!-- EXECUTION HISTORY -->
+<div id="exec-section">
+  <div id="exec-label">Execution History</div>
+  <div id="exec-bar">
+    <div id="exec-log"><span class="prompt">_</span><span id="exec-text"></span></div>
+    <div class="exec-btns">
+      <button class="exec-btn blue" onclick="goStart()" title="Reset">⏮</button>
+      <button class="exec-btn blue" onclick="runAll()" title="Run">▶</button>
+      <button class="exec-btn blue" onclick="stepOnce()" title="Step">⏭</button>
+      <button class="exec-btn gray" onclick="showHistory()" title="History">🕐</button>
+      <button class="exec-btn gray" title="Paint">🎨</button>
+      <button class="exec-btn gray" onclick="clearAll()" title="Clear">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM PANEL -->
+<div id="bottom">
+  <div id="left-panel">
+    <div class="panel-label">Commands</div>
+    <div id="commands-row">
+      <button class="cmd-btn" id="btn-fwd"   onclick="selCmd('fwd')">↑</button>
+      <button class="cmd-btn" id="btn-left"  onclick="selCmd('left')">↺</button>
+      <button class="cmd-btn" id="btn-right" onclick="selCmd('right')">↻</button>
+      <button class="cmd-btn fn" id="btn-f1" onclick="selCmd('f1')">F1</button>
+      <button class="cmd-btn fn" id="btn-f2" onclick="selCmd('f2')">F2</button>
+    </div>
+    <div class="panel-label">Conditions</div>
+    <div id="conditions-row">
+      <button class="cond-btn red-cond"   id="cond-red"   onclick="selCond('red')"></button>
+      <button class="cond-btn blue-cond"  id="cond-blue"  onclick="selCond('blue')"></button>
+      <button class="cond-btn green-cond" id="cond-green" onclick="selCond('green')"></button>
+    </div>
+  </div>
+
+  <div id="right-panel">
+    <div class="panel-label">Functions</div>
+    <div class="fn-row" id="fn1-row">
+      <div class="fn-label-box">f1</div>
+      <!-- slots filled by JS -->
+    </div>
+    <div class="fn-row" id="fn2-row">
+      <div class="fn-label-box">f2</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────
+// LEVEL DEFINITION
+// Grid: 9 rows × 13 cols
+// 0=empty(gray), 1=green, 2=red, 3=star(green+star), 4=robot_start
+// ─────────────────────────────────────────
+// Carefully mapped from screenshot:
+// Row 0: all empty
+// Row 1: cols 1-5 green, col 6 red, cols 7-12 green  (top bar)
+// Row 2: col 1 green, col 12 green
+// Row 3: col 1 green, col 12 green
+// Row 4: col 1 STAR,  col 12 red
+// Row 5: col 12 green
+// Row 6: col 12 green
+// Row 7: col 6 robot(green), col 7 green, col 8 green, col 9 red, col 10 green, col 11 green, col 12 green
+// Row 8: all empty
+
+const GRID_DEF = [
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0], // row 0
+  [0,1,1,1,1,1,1,2,1,1,1,1,1,1,0], // row 1 — 6 green (cols1-6), red col7, 6 green (cols8-13)
+  [0,1,0,0,0,0,0,0,0,0,0,0,0,1,0], // row 2
+  [0,1,0,0,0,0,0,0,0,0,0,0,0,1,0], // row 3
+  [0,3,0,0,0,0,0,0,0,0,0,0,0,2,0], // row 4 — STAR col1, RED col13 (middle of right bar)
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,1,0], // row 5
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,1,0], // row 6
+  [0,0,0,0,0,0,0,4,1,1,2,1,1,1,0], // row 7 — robot col7, green, green, red col10, green col11-13
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // row 8
+];
+
+const ROWS = 9, COLS = 15;
+const START = { r: 7, c: 7, dir: 1 }; // dir: 0=up,1=right,2=down,3=left
+let robot = { ...START };
+let selectedCmd = null, selectedCond = null;
+
+// Programs: main=8 slots, fn1=3 slots, fn2=3 slots
+const SLOTS = { fn1: 6, fn2: 6 };
+let programs = { fn1: [], fn2: [] };
+
+// DIR: 0=up,1=right,2=down,3=left
+const DR = [-1, 0, 1, 0];
+const DC = [0, 1, 0, -1];
+const DIR_ARROW = ['↑','→','↓','←'];
+const CMD_ICON = { fwd:'↑', left:'↺', right:'↻', f1:'F1', f2:'F2' };
+const CMD_COLOR = { f1:'#818cf8', f2:'#f97316' };
+
+// ─────────────────── GRID RENDER ───────────────────
+function buildGrid() {
+  const g = document.getElementById('grid');
+  g.innerHTML = '';
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.id = `cell_${r}_${c}`;
+      const v = GRID_DEF[r][c];
+      if (v === 0) cell.classList.add('empty');
+      else if (v === 1) cell.classList.add('green');
+      else if (v === 2) cell.classList.add('red');
+      else if (v === 3) { cell.classList.add('star'); cell.innerHTML = '<span class="star-icon">★</span>'; }
+      else if (v === 4) cell.classList.add('green');
+      g.appendChild(cell);
+    }
+  }
+  renderRobot();
+}
+
+function renderRobot() {
+  // Clear previous robot
+  document.querySelectorAll('.robot').forEach(el => {
+    el.classList.remove('robot');
+    const ri = el.querySelector('.robot-icon-wrap');
+    if (ri) ri.remove();
+  });
+  const cell = document.getElementById(`cell_${robot.r}_${robot.c}`);
+  if (!cell) return;
+  // Keep original tile color; only add robot class for z-index/positioning
+  cell.classList.add('robot');
+  const tileVal = GRID_DEF[robot.r][robot.c];
+  if (tileVal === 2) cell.style.background = '#e84141';
+  else cell.style.background = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'robot-icon-wrap';
+  // SVG arrow points RIGHT natively (dir=1 = 0deg). dir: 0=up=-90, 1=right=0, 2=down=90, 3=left=180
+  const rotMap = { 0: -90, 1: 0, 2: 90, 3: 180 };
+  const rot = rotMap[robot.dir];
+  wrap.style.cssText = `display:flex;align-items:center;justify-content:center;transform:rotate(${rot}deg);transition:transform 0.15s;`;
+  // Simple right-pointing solid arrow: left vertical bar + right-pointing triangle
+  wrap.innerHTML = `<svg viewBox="0 0 24 24" width="22" height="22" xmlns="http://www.w3.org/2000/svg">
+    <polygon points="4,6 4,18 20,12" fill="white"/>
+  </svg>`;
+  cell.appendChild(wrap);
+
+  // Check win
+  if (GRID_DEF[robot.r][robot.c] === 3) {
+    document.getElementById('win-msg').style.display = 'block';
+    setTimeout(() => document.getElementById('win-msg').style.display = 'none', 3000);
+  }
+}
+
+function tileType(r, c) {
+  const v = GRID_DEF[r][c];
+  if (v === 1 || v === 4) return 'green';
+  if (v === 2) return 'red';
+  if (v === 3) return 'green'; // star is on green
+  return 'none';
+}
+
+function execStep(cmd, cond) {
+  if (cond && cond !== null) {
+    if (tileType(robot.r, robot.c) !== cond) return;
+  }
+  if (cmd === 'fwd') {
+    const nr = robot.r + DR[robot.dir];
+    const nc = robot.c + DC[robot.dir];
+    if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && GRID_DEF[nr][nc] !== 0) {
+      robot.r = nr; robot.c = nc;
+    }
+  } else if (cmd === 'left') {
+    robot.dir = (robot.dir + 3) % 4;
+  } else if (cmd === 'right') {
+    robot.dir = (robot.dir + 1) % 4;
+  }
+}
+
+// ─────────────────── EXECUTION ───────────────────
+let execList = [], execIdx = 0, execTimer = null, isRunning = false;
+
+function flattenProgram(name, depth) {
+  if (depth > 30) return [];
+  const p = programs[name];
+  let out = [];
+  for (const s of p) {
+    if (s.cmd === 'f1') out = out.concat(flattenProgram('fn1', depth + 1));
+    else if (s.cmd === 'f2') out = out.concat(flattenProgram('fn2', depth + 1));
+    else out.push({ ...s });
+  }
+  return out;
+}
+
+function runAll() {
+  if (isRunning) return;
+  execList = flattenProgram('fn1', 0);
+  execIdx = 0; isRunning = true;
+  setLog('Running…');
+  doNext();
+}
+
+function doNext() {
+  if (execIdx >= execList.length) { isRunning = false; setLog('Done.'); return; }
+  const s = execList[execIdx++];
+  execStep(s.cmd, s.cond);
+  renderRobot();
+  setLog(`Step ${execIdx}/${execList.length}: ${s.cond ? '[' + s.cond + '] ' : ''}${CMD_ICON[s.cmd]}`);
+  execTimer = setTimeout(doNext, 300);
+}
+
+function stepOnce() {
+  if (!isRunning) {
+    execList = flattenProgram('fn1', 0);
+    execIdx = 0; isRunning = true;
+  }
+  clearTimeout(execTimer);
+  if (execIdx >= execList.length) { isRunning = false; setLog('Done.'); return; }
+  const s = execList[execIdx++];
+  execStep(s.cmd, s.cond);
+  renderRobot();
+  setLog(`Step ${execIdx}/${execList.length}: ${s.cond ? '[' + s.cond + '] ' : ''}${CMD_ICON[s.cmd]}`);
+}
+
+function goStart() {
+  clearTimeout(execTimer);
+  isRunning = false; execIdx = 0;
+  robot = { ...START };
+  buildGrid();
+  setLog('');
+}
+
+function showHistory() { setLog('Execution history cleared.'); }
+
+function clearAll() {
+  programs = { fn1: [], fn2: [] };
+  renderSlots('fn1'); renderSlots('fn2');
+  goStart();
+}
+
+function setLog(msg) {
+  document.getElementById('exec-text').textContent = msg;
+}
+
+// ─────────────────── COMMAND / CONDITION SELECTION ───────────────────
+function selCmd(cmd) {
+  selectedCmd = cmd;
+  document.querySelectorAll('.cmd-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + cmd)?.classList.add('active');
+}
+
+function selCond(c) {
+  if (selectedCond === c) { selectedCond = null; document.getElementById('cond-' + c)?.classList.remove('active'); return; }
+  selectedCond = c;
+  document.querySelectorAll('.cond-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('cond-' + c)?.classList.add('active');
+}
+
+// ─────────────────── SLOT RENDERING ───────────────────
+function renderSlots(name) {
+  const isMain = name === 'main';
+  const container = isMain
+    ? document.getElementById('main-program-row')
+    : document.getElementById(name + '-row');
+
+  if (isMain) {
+    container.innerHTML = '';
+  } else {
+    // Remove only slot elements, keep the label box
+    Array.from(container.querySelectorAll('.fn-slot')).forEach(el => el.remove());
+  }
+
+  const p = programs[name];
+  const max = SLOTS[name];
+
+  for (let i = 0; i < max; i++) {
+    const slot = document.createElement('div');
+    slot.className = isMain ? 'main-slot' : 'fn-slot';
+
+    if (i < p.length) {
+      const s = p[i];
+      slot.classList.add('filled');
+      slot.textContent = CMD_ICON[s.cmd];
+      if (CMD_COLOR[s.cmd]) slot.style.color = CMD_COLOR[s.cmd];
+      slot.style.fontSize = s.cmd.startsWith('f') ? '11px' : '15px';
+      if (s.cond) {
+        const dot = document.createElement('div');
+        dot.className = 'dot ' + s.cond;
+        slot.appendChild(dot);
+      }
+      slot.title = 'Right-click to remove';
+      slot.addEventListener('click', () => {
+        // left click with cmd selected: replace
+        if (selectedCmd) { p[i] = { cmd: selectedCmd, cond: selectedCond }; renderSlots(name); }
+      });
+      slot.addEventListener('contextmenu', e => { e.preventDefault(); p.splice(i, 1); renderSlots(name); });
+    } else if (i === p.length) {
+      slot.textContent = '';
+      slot.title = 'Click to add command';
+      slot.addEventListener('click', () => {
+        if (!selectedCmd) return;
+        p.push({ cmd: selectedCmd, cond: selectedCond });
+        renderSlots(name);
+      });
+    }
+    container.appendChild(slot);
+  }
+}
+
+// ─────────────────── INIT ───────────────────
+buildGrid();
+renderSlots('fn1');
+renderSlots('fn2');
+</script>
+</body>
+</html>

@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Robot Puzzle</title>
+<title>Googoots Puzzle</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦆</text></svg>">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -331,7 +332,7 @@ let robot = { ...START };
 let selectedCmd = null, selectedCond = null;
 
 // Programs: main=8 slots, fn1=3 slots, fn2=3 slots
-const SLOTS = { fn1: 6, fn2: 6 };
+const SLOTS = { fn1: 3, fn2: 3 };
 let programs = { fn1: [], fn2: [] };
 
 // DIR: 0=up,1=right,2=down,3=left

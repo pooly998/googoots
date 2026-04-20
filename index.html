@@ -285,7 +285,7 @@
     </div>
     <div class="exec-btns">
       <button class="exec-btn blue" onclick="stepBack()" title="Step Back">⏮</button>
-      <button class="exec-btn blue" onclick="runAll()" title="Run">▶</button>
+      <button class="exec-btn blue" id="btn-run" onclick="toggleRun()" title="Run">▶</button>
       <button class="exec-btn blue" onclick="stepOnce()" title="Step">⏭</button>
       <button class="exec-btn gray" onclick="clearAll()" title="Clear">✕</button>
     </div>
@@ -468,35 +468,80 @@ function stepBack() {
   renderRobot();
 }
 
-function flattenProgram(name, depth) {
-  if (depth > 30) return [];
-  const p = programs[name];
-  let out = [];
-  for (const s of p) {
-    if (s.cmd === 'f1') out = out.concat(flattenProgram('fn1', depth + 1));
-    else if (s.cmd === 'f2') out = out.concat(flattenProgram('fn2', depth + 1));
-    else out.push({ ...s });
+const MAX_STEPS = 200;
+let stepCount = 0;
+
+// Stack-based interpreter: each frame is {prog, idx}
+// We push frames instead of flattening, so recursion never blows up
+let execStack = [];
+
+function pushFrame(name) {
+  execStack.push({ prog: programs[name], idx: 0 });
+}
+
+function nextPrimitive() {
+  // Walk the stack to find the next primitive command
+  while (execStack.length > 0) {
+    const frame = execStack[execStack.length - 1];
+    if (frame.idx >= frame.prog.length) { execStack.pop(); continue; }
+    const s = frame.prog[frame.idx++];
+    if (s.cmd === 'f1') { pushFrame('fn1'); continue; }
+    if (s.cmd === 'f2') { pushFrame('fn2'); continue; }
+    return s; // primitive command
   }
-  return out;
+  return null; // done
+}
+
+function setRunBtn(running) {
+  const btn = document.getElementById('btn-run');
+  btn.textContent = running ? '⏸' : '▶';
+  btn.title = running ? 'Pause' : 'Run';
+}
+
+function toggleRun() {
+  if (isRunning) {
+    // Pause
+    clearTimeout(execTimer);
+    isRunning = false;
+    setRunBtn(false);
+  } else {
+    // Resume or start
+    if (execStack.length === 0) {
+      execStack = []; stepCount = 0;
+      pushFrame('fn1');
+    }
+    isRunning = true;
+    setRunBtn(true);
+    doNext();
+  }
 }
 
 function runAll() {
   if (isRunning) return;
-  execList = flattenProgram('fn1', 0);
-  execIdx = 0; isRunning = true;
-  setLog('Running…');
+  execStack = []; stepCount = 0;
+  pushFrame('fn1');
+  isRunning = true;
+  setRunBtn(true);
   doNext();
 }
 
 function doNext() {
-  if (execIdx >= execList.length) { isRunning = false; return; }
-  const s = execList[execIdx++];
+  if (!isRunning) return;
+  if (stepCount >= MAX_STEPS) {
+    isRunning = false; setRunBtn(false);
+    setLog('⚠️ Max steps reached!');
+    setTimeout(() => { goStart(true); setTimeout(() => clearExecTiles(), 800); }, 1200);
+    return;
+  }
+  const s = nextPrimitive();
+  if (!s) { isRunning = false; setRunBtn(false); return; }
+  stepCount++;
   robotHistory.push({ r: robot.r, c: robot.c, dir: robot.dir });
   const result = execStep(s.cmd, s.cond);
   addExecTile(s.cmd, s.cond);
   renderRobot();
   if (result === 'offboard') {
-    isRunning = false;
+    isRunning = false; setRunBtn(false);
     setLog('🚫 Off the board!');
     setTimeout(() => { goStart(true); setTimeout(() => clearExecTiles(), 800); }, 1200);
     return;
@@ -506,28 +551,31 @@ function doNext() {
 
 function stepOnce() {
   if (!isRunning) {
-    execList = flattenProgram('fn1', 0);
-    execIdx = 0; isRunning = true;
+    execStack = []; stepCount = 0;
+    pushFrame('fn1');
+    isRunning = true;
   }
   clearTimeout(execTimer);
-  if (execIdx >= execList.length) { isRunning = false; return; }
-  const s = execList[execIdx++];
+  if (stepCount >= MAX_STEPS) { isRunning = false; setLog('⚠️ Max steps reached!'); return; }
+  const s = nextPrimitive();
+  if (!s) { isRunning = false; return; }
+  stepCount++;
   robotHistory.push({ r: robot.r, c: robot.c, dir: robot.dir });
   const result = execStep(s.cmd, s.cond);
   addExecTile(s.cmd, s.cond);
   renderRobot();
   if (result === 'offboard') {
-    isRunning = false;
+    isRunning = false; setRunBtn(false);
     setLog('🚫 Off the board!');
     setTimeout(() => { goStart(true); setTimeout(() => clearExecTiles(), 800); }, 1200);
-    return;
   }
-  setLog(`Step ${execIdx}/${execList.length}: ${s.cond ? '[' + s.cond + '] ' : ''}${CMD_ICON[s.cmd]}`);
 }
 
 function goStart(keepLog) {
   clearTimeout(execTimer);
   isRunning = false; execIdx = 0;
+  setRunBtn(false);
+  execStack = []; stepCount = 0;
   robotHistory = [];
   if (!keepLog) clearExecTiles();
   robot = { r: START.r, c: START.c, dir: START.dir };
